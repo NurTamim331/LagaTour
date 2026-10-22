@@ -1,8 +1,17 @@
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
 import bcrypt from "bcryptjs";
 
 dotenv.config();
+const serverEnv = path.resolve(process.cwd(), "server/.env");
+if (fs.existsSync(serverEnv)) {
+  dotenv.config({ path: serverEnv, override: true });
+}
+
+const isLocalhost = !process.env.DB_HOST || process.env.DB_HOST === "127.0.0.1" || process.env.DB_HOST === "localhost";
+const useSsl = process.env.DB_SSL === "true" || (!isLocalhost && (process.env.DB_HOST?.includes("tidbcloud.com") || process.env.DB_HOST?.includes("aivencloud.com") || process.env.DB_PORT === "4000"));
 
 const dbConfig = {
   host: process.env.DB_HOST || "127.0.0.1",
@@ -12,7 +21,8 @@ const dbConfig = {
   database: process.env.DB_NAME || "lagatour_db",
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  ssl: useSsl ? { minVersion: "TLSv1.2", rejectUnauthorized: true } : undefined
 };
 
 let pool = null;
@@ -37,16 +47,22 @@ export async function query(sql, params = []) {
  */
 export async function initDatabase() {
   try {
-    // 1. Establish initial connection to MySQL server without database specified
-    const initialConn = await mysql.createConnection({
-      host: dbConfig.host,
-      port: dbConfig.port,
-      user: dbConfig.user,
-      password: dbConfig.password
-    });
+    // 1. Ensure target database exists (connects to local or default 'test' database on cloud)
+    try {
+      const initialConn = await mysql.createConnection({
+        host: dbConfig.host,
+        port: dbConfig.port,
+        user: dbConfig.user,
+        password: dbConfig.password,
+        database: isLocalhost ? undefined : "test",
+        ssl: dbConfig.ssl
+      });
 
-    await initialConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
-    await initialConn.end();
+      await initialConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
+      await initialConn.end();
+    } catch (dbCreateErr) {
+      console.warn("Notice: Initial database creation check skipped:", dbCreateErr.message);
+    }
 
     const p = await getPool();
 

@@ -93,7 +93,8 @@ export default function AddPlaceLocationModal({ isOpen, onClose, currentUser, on
         user: currentUser,
         latitude: coords.lat,
         longitude: coords.lng,
-        customName: customName.trim() || undefined
+        customName: customName.trim() || undefined,
+        isPublic: true
       });
 
       confetti({
@@ -102,7 +103,7 @@ export default function AddPlaceLocationModal({ isOpen, onClose, currentUser, on
         origin: { y: 0.6 }
       });
 
-      setSuccessMessage(res.message || "📍 Spot recorded to 'My Places'!");
+      setSuccessMessage(res.message || "📍 Spot added to Explore Places!");
       if (onPlaceAdded) onPlaceAdded(res.place);
 
       setTimeout(() => {

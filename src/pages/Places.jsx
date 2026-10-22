@@ -572,8 +572,11 @@ export default function Places() {
         isOpen={isAddLocationOpen}
         onClose={() => setIsAddLocationOpen(false)}
         currentUser={currentUser}
-        onPlaceAdded={() => {
-          showToast("📍 Spot recorded in 'My Places'! Head to your profile to edit and publish.");
+        onPlaceAdded={(newPlace) => {
+          showToast("📍 Spot recorded and added to the list!");
+          if (newPlace) {
+            setPlaces(prev => [newPlace, ...prev.filter(p => (p.id !== newPlace.id && p.place_id !== newPlace.place_id))]);
+          }
           loadPlaces();
         }}
       />

@@ -156,7 +156,7 @@ export async function getNearbyPlaces(req, res) {
  */
 export async function quickSavePlace(req, res) {
   try {
-    const { user, latitude, longitude, customName } = req.body;
+    const { user, latitude, longitude, customName, isPublic } = req.body;
     const userId = await ensureUserExists(user);
 
     const lat = parseFloat(latitude);
@@ -169,19 +169,21 @@ export async function quickSavePlace(req, res) {
     const placeId = `place_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     const randomCode = Math.floor(1000 + Math.random() * 9000);
     const placeholderTitle = customName?.trim() || `📍 Discovered Spot #${randomCode}`;
+    const publishStatus = isPublic === false ? 0 : 1;
 
-    // 1. Create draft place (is_public = 0)
+    // 1. Create place (published by default so it shows up in Explore Places)
     await query(`
       INSERT INTO places (
         place_id, place_name, description, latitude, longitude, safety_rating,
         safety_rating_count, is_public, created_by
-      ) VALUES (?, ?, ?, ?, ?, 5.0, 0, 0, ?)
+      ) VALUES (?, ?, ?, ?, ?, 5.0, 0, ?, ?)
     `, [
       placeId,
       placeholderTitle,
-      `Location recorded on ${new Date().toLocaleDateString()} at coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)}). Edit details to publish to the community feed.`,
+      `Location recorded on ${new Date().toLocaleDateString()} at coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)}).`,
       lat,
       lng,
+      publishStatus,
       userId
     ]);
 
@@ -197,7 +199,7 @@ export async function quickSavePlace(req, res) {
 
     res.status(201).json({
       success: true,
-      message: "Place location successfully recorded to 'My Places'! You can edit photos and details anytime.",
+      message: "Place location successfully recorded and added to the list!",
       place: {
         id: placeId,
         place_id: placeId,
@@ -206,7 +208,8 @@ export async function quickSavePlace(req, res) {
         latitude: lat,
         longitude: lng,
         safetyRating: 5.0,
-        isPublic: false,
+        isPublic: publishStatus === 1,
+        is_public: publishStatus,
         isOwner: true,
         images: [],
         createdAt: new Date().toISOString()
@@ -511,8 +514,15 @@ export async function getPublicPlacesFeed(req, res) {
     const safetyFilter = req.query.safetyFilter || null; // 'Safe', 'Moderate', 'Caution'
     const search = req.query.search || null;
 
-    let conditions = ["p.is_public = 1"];
+    let conditions = [];
     let params = [];
+
+    if (currentUserId) {
+      conditions.push("(p.is_public = 1 OR p.created_by = ?)");
+      params.push(currentUserId);
+    } else {
+      conditions.push("p.is_public = 1");
+    }
 
     if (divisionId && divisionId !== "All") {
       conditions.push("p.division_id = ?");
